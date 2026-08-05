@@ -47,6 +47,11 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const signInWithGoogle = async () => {
   try {
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+
     const result = await signInWithPopup(auth, googleProvider);
     console.log('Google sign-in succeeded', result.user?.email || result.user?.uid);
     return result;

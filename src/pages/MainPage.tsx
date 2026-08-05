@@ -102,6 +102,8 @@ const App: React.FC = () => {
     setIsSigningIn(true);
     try {
       await signInWithGoogle();
+      setAuthError('');
+      setIsSigningIn(false);
     } catch (error) {
       console.error('Google sign-in failed:', error);
       setAuthError(error instanceof Error ? error.message : 'Google sign-in failed. Please try again.');
@@ -168,6 +170,8 @@ const App: React.FC = () => {
 
       setUser(u);
       if (u) {
+        setAuthError('');
+        setIsSigningIn(false);
         // Sync landlord info for authenticated user
         const cloudLandlord = await getLandlordInfo(u.uid);
         if (cloudLandlord) {
