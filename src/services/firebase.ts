@@ -64,7 +64,8 @@ export const signInWithGoogle = async () => {
 
     if (code === 'auth/unauthorized-domain') {
       console.warn('Unauthorized domain for Firebase auth:', code, message);
-      throw new Error('This domain is not allowed in Firebase Auth. Add localhost and your live domain in Firebase Authorized domains.');
+      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+      throw new Error(`This domain is not allowed in Firebase Auth. Add "${currentDomain}" in Firebase Authorized domains.`);
     }
 
     if (code === 'auth/invalid-api-key') {
