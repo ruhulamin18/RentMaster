@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Tenant profile information and fixed billing rates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "flatNo": { "type": "string" },
+        "fixedRent": { "type": "number" },
+        "fixedWifi": { "type": "number" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["id", "name", "ownerId"]
+    },
+    "Receipt": {
+      "title": "Receipt",
+      "description": "A generated rent receipt record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "number" },
+        "tenantName": { "type": "string" },
+        "rentMonth": { "type": "string" },
+        "paymentDate": { "type": "string" },
+        "houseRent": { "type": "number" },
+        "gasBill": { "type": "number" },
+        "electricityBill": { "type": "number" },
+        "wifiBill": { "type": "number" },
+        "garbageBill": { "type": "number" },
+        "previousDue": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "totalBill": { "type": "number" },
+        "remainingDue": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["tenantId", "tenantName", "totalBill", "ownerId"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Information about the building owner (landlord)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "houseName": { "type": "string" },
+        "houseNo": { "type": "string" },
+        "name": { "type": "string" },
+        "mobile": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["uid"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Building settings and owner info"
+    },
+    "users/{userId}/tenants/{tenantId}": {
+      "schema": "Tenant",
+      "description": "List of tenants managed by this user"
+    },
+    "users/{userId}/receipts/{receiptId}": {
+      "schema": "Receipt",
+      "description": "Historical bill calculations"
+    }
+  }
+}
