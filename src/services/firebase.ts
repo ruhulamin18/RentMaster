@@ -1,5 +1,5 @@
 import { initializeApp, FirebaseOptions } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { browserLocalPersistence, getAuth, GoogleAuthProvider, setPersistence, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
@@ -42,16 +42,13 @@ if (missingKeys.length > 0) {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+const authReady = setPersistence(auth, browserLocalPersistence);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const signInWithGoogle = async () => {
   try {
-    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-      await signInWithRedirect(auth, googleProvider);
-      return null;
-    }
-
+    await authReady;
     const result = await signInWithPopup(auth, googleProvider);
     console.log('Google sign-in succeeded', result.user?.email || result.user?.uid);
     return result;
@@ -63,6 +60,7 @@ export const signInWithGoogle = async () => {
 
     if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
       console.warn('Popup sign-in did not complete, trying redirect:', code, message);
+      await authReady;
       await signInWithRedirect(auth, googleProvider);
       return null;
     }
