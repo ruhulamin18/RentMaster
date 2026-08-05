@@ -1,76 +1,42 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 0. Global Safety Net
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // --- Helpers ---
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isSignedIn() &&
+             request.auth.token.email in [
+               'amin2305101727@diu.edu.bd',
+               'mdruhulaminridoy18@gmail.com'
+             ];
+    }
+
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return isAdmin() && request.auth.uid == userId;
     }
 
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    // --- Validation Helpers ---
-    
     function isValidUserProfile(data) {
       return data.keys().hasAll(['uid']) &&
              data.uid == request.auth.uid &&
              data.uid is string &&
              (!('houseName' in data) || (data.houseName is string && data.houseName.size() <= 300)) &&
-<<<<<<< HEAD
              (!('houseNo' in data) || (data.houseNo is string && data.houseNo.size() <= 100)) &&
-=======
->>>>>>> b03e7cf89a0d6ed08f1fe68090da275672b77ec9
              (!('name' in data) || (data.name is string && data.name.size() <= 300)) &&
              (!('mobile' in data) || (data.mobile is string && data.mobile.size() <= 50)) &&
-             (!('address' in data) || (data.address is string && data.address.size() <= 500));
+             (!('address' in data) || (data.address is string && data.address.size() <= 500)) &&
+             (!('defaultGasBill' in data) || data.defaultGasBill is number) &&
+             (!('defaultGarbageBill' in data) || data.defaultGarbageBill is number) &&
+             (!('defaultWaterBill' in data) || data.defaultWaterBill is number);
     }
-
-    function isValidTenant(data) {
-      // id is a number (Date.now() or 1-8)
-      return data.keys().hasAll(['id', 'name', 'ownerId']) &&
-             data.ownerId == request.auth.uid &&
-             data.name is string && data.name.size() <= 200 &&
-             data.id is number;
-    }
-
-    function isValidReceipt(data) {
-      return data.keys().hasAll(['tenantId', 'tenantName', 'totalBill', 'ownerId', 'createdAt']) &&
-             data.ownerId == request.auth.uid &&
-             (data.tenantId is string || data.tenantId is number) &&
-             data.tenantName is string &&
-             data.totalBill is number &&
-             (data.createdAt is timestamp || data.createdAt.toMillis() > 0);
-    }
-
-    // --- Match Rules ---
 
     match /users/{userId} {
-<<<<<<< HEAD
       allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUserProfile(incoming());
-      allow update: if isOwner(userId) && isValidUserProfile(incoming());
-      
+      allow create, update: if isOwner(userId) && isValidUserProfile(request.resource.data);
+
       match /tenants/{tenantDocId} {
-        allow list, get: if isOwner(userId);
-        allow create, update, delete: if isOwner(userId);
+        allow list, get, create, update, delete: if isOwner(userId);
       }
 
       match /receipts/{receiptId} {
@@ -83,31 +49,6 @@ service cloud.firestore {
       allow read: if true;
     }
 
-=======
-      allow get: if isOwner(userId) && isValidId(userId);
-      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
-      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming()) && 
-                    incoming().diff(existing()).affectedKeys().hasOnly(['houseName', 'houseNo', 'name', 'mobile', 'address', 'uid']);
-      
-      match /tenants/{tenantDocId} {
-        allow list: if isOwner(userId);
-        allow get: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidTenant(incoming());
-        allow update: if isOwner(userId) && isValidTenant(incoming()) &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['name', 'address', 'phone', 'flatNo', 'fixedRent', 'fixedWifi', 'id', 'ownerId']);
-        allow delete: if isOwner(userId);
-      }
-
-      match /receipts/{receiptId} {
-        allow list: if isOwner(userId);
-        allow get: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidReceipt(incoming());
-        allow delete: if isOwner(userId);
-      }
-    }
-
->>>>>>> b03e7cf89a0d6ed08f1fe68090da275672b77ec9
-    // Final Safety Net
     match /{document=**} {
       allow read, write: if false;
     }

@@ -51,6 +51,17 @@ const LANDLORD_DEFAULT: LandlordInfo = {
 
 type Tab = 'search' | 'calculator' | 'history' | 'tenants' | 'landlord';
 
+const ADMIN_EMAILS = [
+  'amin2305101727@diu.edu.bd',
+  'mdruhulaminridoy18@gmail.com',
+];
+
+const UNAUTHORIZED_ADMIN_MESSAGE = 'এই Gmail admin list-এ নেই। Landlord/Admin access পেতে অনুমোদিত Gmail দিয়ে sign in করুন।';
+
+const isAdminUser = (u: User | null) => {
+  return !!u?.email && ADMIN_EMAILS.includes(u.email.toLowerCase());
+};
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('search');
   const [landlord, setLandlord] = useState<LandlordInfo>(LANDLORD_DEFAULT);
@@ -62,6 +73,7 @@ const App: React.FC = () => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [authError, setAuthError] = useState('');
+  const isAdmin = isAdminUser(user);
 
   // Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,7 +113,17 @@ const App: React.FC = () => {
     setAuthError('');
     setIsSigningIn(true);
     try {
-      await signInWithGoogle();
+      const result = await signInWithGoogle();
+      if (result?.user) {
+        if (!isAdminUser(result.user)) {
+          await logout();
+          setUser(null);
+          setAuthError(UNAUTHORIZED_ADMIN_MESSAGE);
+          setIsSigningIn(false);
+          return;
+        }
+        setUser(result.user);
+      }
       setAuthError('');
       setIsSigningIn(false);
     } catch (error) {
@@ -150,6 +172,12 @@ const App: React.FC = () => {
       try {
         const redirectResult = await getRedirectResult(auth);
         if (redirectResult?.user) {
+          if (!isAdminUser(redirectResult.user)) {
+            await logout();
+            setUser(null);
+            setAuthError(UNAUTHORIZED_ADMIN_MESSAGE);
+            return;
+          }
           console.log('Firebase redirect sign-in completed:', redirectResult.user.email || redirectResult.user.uid);
           setAuthError('');
         }
@@ -168,22 +196,44 @@ const App: React.FC = () => {
       if (unsubT) { unsubT(); unsubT = null; }
       if (unsubR) { unsubR(); unsubR = null; }
 
+      if (u && !isAdminUser(u)) {
+        setUser(null);
+        setAuthError(UNAUTHORIZED_ADMIN_MESSAGE);
+        setIsSigningIn(false);
+        logout();
+        return;
+      }
+
       setUser(u);
       if (u) {
         setAuthError('');
         setIsSigningIn(false);
         // Sync landlord info for authenticated user
-        const cloudLandlord = await getLandlordInfo(u.uid);
-        if (cloudLandlord) {
-          setLandlord({
-            ...LANDLORD_DEFAULT,
-            ...cloudLandlord,
-            defaultGasBill: cloudLandlord.defaultGasBill !== undefined ? cloudLandlord.defaultGasBill : 1080,
-            defaultGarbageBill: cloudLandlord.defaultGarbageBill !== undefined ? cloudLandlord.defaultGarbageBill : 50,
-            defaultWaterBill: cloudLandlord.defaultWaterBill !== undefined ? cloudLandlord.defaultWaterBill : 0,
-          });
-        } else {
-          // New Gmail account: set a clean blank profile (do NOT auto-save defaults to Firebase)
+        try {
+          const cloudLandlord = await getLandlordInfo(u.uid);
+          if (cloudLandlord) {
+            setLandlord({
+              ...LANDLORD_DEFAULT,
+              ...cloudLandlord,
+              defaultGasBill: cloudLandlord.defaultGasBill !== undefined ? cloudLandlord.defaultGasBill : 1080,
+              defaultGarbageBill: cloudLandlord.defaultGarbageBill !== undefined ? cloudLandlord.defaultGarbageBill : 50,
+              defaultWaterBill: cloudLandlord.defaultWaterBill !== undefined ? cloudLandlord.defaultWaterBill : 0,
+            });
+          } else {
+            // New Gmail account: set a clean blank profile (do NOT auto-save defaults to Firebase)
+            setLandlord({
+              houseName: '',
+              houseNo: '',
+              name: u.displayName || '',
+              mobile: u.phoneNumber || '',
+              address: '',
+              defaultGasBill: 1080,
+              defaultGarbageBill: 50,
+              defaultWaterBill: 0,
+            });
+          }
+        } catch (profileError) {
+          console.error('Failed to load landlord profile after sign-in:', profileError);
           setLandlord({
             houseName: '',
             houseNo: '',
@@ -240,10 +290,10 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!user) {
+    if (!isAdmin) {
       localStorage.setItem('rentmaster_tenants', JSON.stringify(tenants));
     }
-  }, [tenants, user]);
+  }, [tenants, isAdmin]);
 
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -279,7 +329,7 @@ const App: React.FC = () => {
       }
       
       const tenant = tenants.find(t => t.id === Number(value));
-      const isGuest = !user;
+      const isGuest = !isAdmin;
       
       // Auto-calculate previous due from history only for authenticated users.
       let autoPreviousDue = 0;
@@ -328,7 +378,7 @@ const App: React.FC = () => {
     if (!receiptToDelete) return;
     const id = receiptToDelete.id;
     try {
-      if (user) {
+      if (isAdmin && user) {
         await removeReceipt(user.uid, id);
       } else {
         setReceipts(prev => prev.filter(r => r.id !== id));
@@ -344,12 +394,12 @@ const App: React.FC = () => {
     const id = tenantToDelete.id;
     setTenants(prev => {
       const next = prev.filter(t => t.id !== id);
-      if (!user) {
+      if (!isAdmin) {
         localStorage.setItem('rentmaster_tenants', JSON.stringify(next));
       }
       return next;
     });
-    if (user) {
+    if (isAdmin && user) {
       try {
         await removeTenant(user.uid, id);
       } catch (err) {
@@ -413,13 +463,13 @@ const App: React.FC = () => {
       const next = exists
         ? prev.map(t => t.id === tenantId ? updated : t)
         : [...prev, updated];
-      if (!user) {
+      if (!isAdmin) {
         localStorage.setItem('rentmaster_tenants', JSON.stringify(next));
       }
       return next;
     });
 
-    if (user) {
+    if (isAdmin && user) {
       try {
         await saveTenant(user.uid, updated);
       } catch (err) {
@@ -462,7 +512,7 @@ const App: React.FC = () => {
     }
 
     setLandlord(updated);
-    if (user) {
+    if (isAdmin && user) {
       setIsSavingLandlord(true);
       try {
         await saveLandlordInfo(user.uid, updated);
@@ -533,7 +583,7 @@ const App: React.FC = () => {
     setResult(calcResult);
     setEditingReceiptId(null); 
 
-    if (user) {
+    if (isAdmin && user) {
       const receiptData = {
         ...calcResult,
         landlordInfo: landlord
@@ -604,16 +654,16 @@ const App: React.FC = () => {
                 <span className="relative z-10 flex items-center gap-1">
                   {tab === 'search' ? '🔍 Search' :
                    tab === 'calculator' ? 'Calculator' :
-                   tab === 'history' ? `History ${!user ? '🔒' : ''}` :
-                   tab === 'tenants' ? `Tenants ${!user ? '🔒' : ''}` :
-                   `Profile ${!user ? '🔒' : ''}`}
+                   tab === 'history' ? `History ${!isAdmin ? '🔒' : ''}` :
+                   tab === 'tenants' ? `Tenants ${!isAdmin ? '🔒' : ''}` :
+                   `Profile ${!isAdmin ? '🔒' : ''}`}
                 </span>
               </button>
             ))}
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {user ? (
+            {isAdmin && user ? (
               <div className="flex items-center gap-2 pr-1">
                 <div className="hidden md:block text-right">
                   <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight leading-none">{user.displayName?.split(' ')[0]}</p>
@@ -692,7 +742,7 @@ const App: React.FC = () => {
                         <div className="flex-1 min-w-0">
                           <p className="font-extrabold text-xs sm:text-sm tracking-tight leading-snug flex items-center gap-1.5">
                             <span>{item.label}</span>
-                            {item.requiresAdmin && !user && (
+                            {item.requiresAdmin && !isAdmin && (
                               <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-black">
                                 Admin
                               </span>
@@ -712,7 +762,7 @@ const App: React.FC = () => {
                   })}
                 </div>
 
-                {user ? (
+                {isAdmin && user ? (
                   <div className="pt-2 border-t border-slate-100">
                     <button
                       onClick={() => {
@@ -749,12 +799,12 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
-        {authError && !user && (
+        {authError && !isAdmin && (
           <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800 shadow-sm">
             {authError}
           </div>
         )}
-        {user && (!landlord.houseName || !landlord.name || !landlord.mobile) && activeTab !== 'landlord' && (
+        {isAdmin && (!landlord.houseName || !landlord.name || !landlord.mobile) && activeTab !== 'landlord' && (
           <div className="mb-6 p-4 bg-amber-50/90 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-sm">
             <div className="flex items-start gap-2.5">
               <span className="text-xl shrink-0">⚠️</span>
@@ -915,7 +965,7 @@ const App: React.FC = () => {
                     বাড়ির মালিককে (Admin) প্রথমে Google Sign In করে Calculator থেকে ভাড়া ক্যালকুলেট ও Save করতে হবে। তবেই ভাড়াটিয়া এখানে সার্চ করে রশিদ পেয়ে যাবে।
                   </p>
                 </div>
-                {!user && (
+                {!isAdmin && (
                   <button
                     type="button"
                     onClick={handleSignIn}
@@ -1010,7 +1060,7 @@ const App: React.FC = () => {
         {/* Landlord View */}
         {activeTab === 'landlord' && (
           <div className="bg-white rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-8 md:p-10 border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-            {!user ? (
+            {!isAdmin ? (
               <div className="py-12 sm:py-16 text-center space-y-6 max-w-xl mx-auto">
                 <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1038,10 +1088,10 @@ const App: React.FC = () => {
                   <div>
                     <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Building Profile (বিল্ডিং সেটিং)</h2>
                     <p className="text-slate-500 font-medium mt-1 uppercase tracking-widest text-[9px] sm:text-[10px]">
-                      {user ? `Signed in as: ${user.email}` : "Configure property details"}
+                      {isAdmin && user ? `Signed in as: ${user.email}` : "Configure property details"}
                     </p>
                   </div>
-                  {user && (
+                  {isAdmin && user && (
                     <button
                       type="button"
                       onClick={() => setShowLogoutConfirm(true)}
@@ -1067,7 +1117,7 @@ const App: React.FC = () => {
                   </div>
                 )}
                 
-                <form key={user ? user.uid : 'guest'} onSubmit={handleUpdateLandlord} className="space-y-6 sm:space-y-8">
+                <form key={isAdmin && user ? user.uid : 'guest'} onSubmit={handleUpdateLandlord} className="space-y-6 sm:space-y-8">
                   {/* Basic Info */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                     {[
@@ -1180,12 +1230,12 @@ const App: React.FC = () => {
               <div>
                 <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Billing History</h2>
                 <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
-                  {user ? (isLoadingReceipts ? "Synchronizing Cloud Data..." : `${receipts.length} total digital records`) : "Guest Mode - Local Storage"}
+                  {isAdmin ? (isLoadingReceipts ? "Synchronizing Cloud Data..." : `${receipts.length} total digital records`) : "Guest Mode - Local Storage"}
                 </p>
               </div>
             </div>
             
-            {!user ? (
+            {!isAdmin ? (
                <div className="p-8 sm:p-20 text-center space-y-6">
                   <div className="w-14 h-14 sm:w-16 sm:h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 sm:mb-6 transform rotate-3">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 sm:h-8 sm:w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1297,7 +1347,7 @@ const App: React.FC = () => {
         {/* Tenants View */}
         {activeTab === 'tenants' && (
           <div className="bg-white rounded-2xl sm:rounded-[2.5rem] border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-            {!user ? (
+            {!isAdmin ? (
               <div className="p-8 sm:p-16 text-center space-y-6 max-w-xl mx-auto">
                 <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
