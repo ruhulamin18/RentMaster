@@ -92,6 +92,16 @@ const App: React.FC = () => {
       setIsSearching(false);
     }
   };
+
+  const handleSignIn = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error('Google sign-in failed:', error);
+      alert('Google sign-in failed. Please check your browser popup settings and Firebase auth configuration.');
+    }
+  };
   
   const mergeTenants = (loaded: Tenant[]) => {
     return loaded.map(t => {
@@ -127,6 +137,19 @@ const App: React.FC = () => {
     let unsubT: (() => void) | null = null;
     let unsubR: (() => void) | null = null;
     let hasAttemptedSeed = false;
+
+    const initRedirectSignIn = async () => {
+      try {
+        const redirectResult = await getRedirectResult(auth);
+        if (redirectResult?.user) {
+          console.log('Firebase redirect sign-in completed:', redirectResult.user.email || redirectResult.user.uid);
+        }
+      } catch (redirectError) {
+        console.error('Firebase redirect result error:', redirectError);
+      }
+    };
+
+    initRedirectSignIn();
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
       // Cleanup previous sub-listeners if they exist
@@ -592,7 +615,8 @@ const App: React.FC = () => {
               </div>
             ) : (
               <button 
-                onClick={signInWithGoogle}
+                type="button"
+                onClick={handleSignIn}
                 className="hidden sm:block bg-slate-900 text-white px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-xl font-bold text-[9px] sm:text-[10px] uppercase tracking-wider sm:tracking-widest hover:bg-black transition-all"
               >
                 Landlord Sign In
@@ -691,8 +715,9 @@ const App: React.FC = () => {
                 ) : (
                   <div className="pt-2 sm:hidden border-t border-slate-100">
                     <button
-                      onClick={() => {
-                        signInWithGoogle();
+                      type="button"
+                      onClick={(e) => {
+                        handleSignIn(e as any);
                         setIsMenuOpen(false);
                       }}
                       className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-2"
@@ -871,7 +896,8 @@ const App: React.FC = () => {
                 </div>
                 {!user && (
                   <button
-                    onClick={signInWithGoogle}
+                    type="button"
+                    onClick={handleSignIn}
                     className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black px-5 py-2.5 rounded-xl text-xs uppercase tracking-widest shadow-md shadow-indigo-100 transition-all"
                   >
                     Landlord Sign In (মেমো সেভ করতে লগইন করুন)
@@ -978,7 +1004,8 @@ const App: React.FC = () => {
                   </p>
                 </div>
                 <button
-                  onClick={signInWithGoogle}
+                  type="button"
+                  onClick={handleSignIn}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 transition-all inline-flex items-center gap-2"
                 >
                   Sign In as Landlord
@@ -1146,7 +1173,7 @@ const App: React.FC = () => {
                   </div>
                   <h3 className="text-lg sm:text-xl font-black text-slate-800 tracking-tight uppercase text-[10px] tracking-[0.2em]">Cloud Sync Required</h3>
                   <p className="text-slate-500 font-medium max-w-xs mx-auto text-xs sm:text-sm">Please sign in with Google to enable permanent cloud archiving and billing analytics.</p>
-                  <button onClick={signInWithGoogle} className="bg-indigo-600 text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all">Enable Sync</button>
+                  <button type="button" onClick={handleSignIn} className="bg-indigo-600 text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all">Enable Sync</button>
                </div>
             ) : isLoadingReceipts && receipts.length === 0 ? (
                <div className="p-12 sm:p-20 text-center space-y-4">
@@ -1264,7 +1291,8 @@ const App: React.FC = () => {
                   </p>
                 </div>
                 <button
-                  onClick={signInWithGoogle}
+                  type="button"
+                  onClick={handleSignIn}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 transition-all inline-flex items-center gap-2"
                 >
                   Sign In as Landlord

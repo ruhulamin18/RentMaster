@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, FirebaseOptions } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -18,8 +18,26 @@ import {
   getDocs,
   limit
 } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import firebaseJson from '../../firebase-applet-config.json';
 import { LandlordInfo, Tenant, CalculationResult, ReceiptRecord } from '../types';
+
+const firebaseConfig: FirebaseOptions & { firestoreDatabaseId?: string } = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseJson.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseJson.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseJson.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseJson.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseJson.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseJson.appId,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseJson.measurementId,
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseJson.firestoreDatabaseId,
+};
+
+const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId', 'firestoreDatabaseId'] as const;
+const missingKeys = requiredKeys.filter((key) => !firebaseConfig[key]);
+if (missingKeys.length > 0) {
+  console.error('Firebase configuration is missing required keys:', missingKeys);
+  throw new Error('Firebase configuration is incomplete. Check env vars or firebase-applet-config.json.');
+}
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -29,24 +47,47 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const signInWithGoogle = async () => {
   try {
-    return await signInWithPopup(auth, googleProvider);
+    const result = await signInWithPopup(auth, googleProvider);
+    console.log('Google sign-in popup succeeded', result.user?.email || result.user?.uid);
+    return result;
   } catch (error: any) {
-    if (
-      error?.code === 'auth/cancelled-popup-request' ||
-      error?.code === 'auth/popup-closed-by-user' ||
-      error?.code === 'auth/user-cancelled'
-    ) {
-      console.log('Google sign-in popup cancelled by user or pending request.');
-      return null;
+    console.error('Google sign-in error:', error);
+
+    const code = error?.code || 'unknown';
+    const message = error?.message || 'Unknown Firebase auth error';
+
+    if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      console.warn('Popup blocked or closed:', code, message);
+      throw new Error('Popup was blocked or closed. Please allow popups for this site.');
     }
 
-    console.warn('Google sign-in popup failed, falling back to redirect:', error);
+    if (code === 'auth/unauthorized-domain') {
+      console.warn('Unauthorized domain for Firebase auth:', code, message);
+      throw new Error('Unauthorized domain. Add this domain to Firebase Authorized Domains.');
+    }
+
+    if (code === 'auth/invalid-api-key') {
+      console.warn('Invalid Firebase API key:', code, message);
+      throw new Error('Invalid Firebase API key. Verify your Firebase config.');
+    }
+
+    if (code === 'auth/network-request-failed') {
+      console.warn('Network error during Firebase auth:', code, message);
+      throw new Error('Network error. Check your internet connection.');
+    }
+
+    if (code === 'auth/configuration-not-found' || code === 'auth/app-deleted' || code === 'auth/invalid-user-token') {
+      console.warn('Firebase configuration/auth error:', code, message);
+      throw new Error('Firebase configuration error. Verify your project settings and Firebase setup.');
+    }
+
+    console.warn('Unknown Firebase auth error, falling back to redirect:', code, message);
     try {
       await signInWithRedirect(auth, googleProvider);
       return null;
     } catch (redirectError: any) {
       console.error('Google sign-in redirect failed:', redirectError);
-      return null;
+      throw new Error(`Redirect sign-in failed: ${redirectError?.message || redirectError}`);
     }
   }
 };
