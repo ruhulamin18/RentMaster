@@ -1,5 +1,5 @@
 import { initializeApp, FirebaseOptions } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithRedirect, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
@@ -47,23 +47,17 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const signInWithGoogle = async () => {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    console.log('Google sign-in popup succeeded', result.user?.email || result.user?.uid);
-    return result;
+    await signInWithRedirect(auth, googleProvider);
+    return null;
   } catch (error: any) {
     console.error('Google sign-in error:', error);
 
     const code = error?.code || 'unknown';
     const message = error?.message || 'Unknown Firebase auth error';
 
-    if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-      console.warn('Popup blocked or closed:', code, message);
-      throw new Error('Popup was blocked or closed. Please allow popups for this site.');
-    }
-
     if (code === 'auth/unauthorized-domain') {
       console.warn('Unauthorized domain for Firebase auth:', code, message);
-      throw new Error('Unauthorized domain. Add this domain to Firebase Authorized Domains.');
+      throw new Error('This domain is not allowed in Firebase Auth. Add localhost and your live domain in Firebase Authorized domains.');
     }
 
     if (code === 'auth/invalid-api-key') {
@@ -81,14 +75,7 @@ export const signInWithGoogle = async () => {
       throw new Error('Firebase configuration error. Verify your project settings and Firebase setup.');
     }
 
-    console.warn('Unknown Firebase auth error, falling back to redirect:', code, message);
-    try {
-      await signInWithRedirect(auth, googleProvider);
-      return null;
-    } catch (redirectError: any) {
-      console.error('Google sign-in redirect failed:', redirectError);
-      throw new Error(`Redirect sign-in failed: ${redirectError?.message || redirectError}`);
-    }
+    throw new Error(message);
   }
 };
 export const logout = () => signOut(auth);

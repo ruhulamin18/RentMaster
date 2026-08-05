@@ -19,7 +19,7 @@ import {
   saveLandlordInfo,
   searchReceipts
 } from '../services/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged, User } from 'firebase/auth';
 import { normalizeStr, normalizePhone, isPhoneSearch } from '../hooks/searchHelpers';
 
 const MONTHS = [
@@ -60,6 +60,8 @@ const App: React.FC = () => {
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [receiptToDelete, setReceiptToDelete] = useState<ReceiptRecord | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authError, setAuthError] = useState('');
 
   // Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,11 +97,15 @@ const App: React.FC = () => {
 
   const handleSignIn = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
+    if (isSigningIn) return;
+    setAuthError('');
+    setIsSigningIn(true);
     try {
       await signInWithGoogle();
     } catch (error) {
       console.error('Google sign-in failed:', error);
-      alert('Google sign-in failed. Please check your browser popup settings and Firebase auth configuration.');
+      setAuthError(error instanceof Error ? error.message : 'Google sign-in failed. Please try again.');
+      setIsSigningIn(false);
     }
   };
   
@@ -143,9 +149,13 @@ const App: React.FC = () => {
         const redirectResult = await getRedirectResult(auth);
         if (redirectResult?.user) {
           console.log('Firebase redirect sign-in completed:', redirectResult.user.email || redirectResult.user.uid);
+          setAuthError('');
         }
       } catch (redirectError) {
         console.error('Firebase redirect result error:', redirectError);
+        setAuthError(redirectError instanceof Error ? redirectError.message : 'Google sign-in failed. Please try again.');
+      } finally {
+        setIsSigningIn(false);
       }
     };
 
@@ -617,9 +627,10 @@ const App: React.FC = () => {
               <button 
                 type="button"
                 onClick={handleSignIn}
+                disabled={isSigningIn}
                 className="hidden sm:block bg-slate-900 text-white px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-xl font-bold text-[9px] sm:text-[10px] uppercase tracking-wider sm:tracking-widest hover:bg-black transition-all"
               >
-                Landlord Sign In
+                {isSigningIn ? 'Opening Google...' : 'Landlord Sign In'}
               </button>
             )}
 
@@ -720,9 +731,10 @@ const App: React.FC = () => {
                         handleSignIn(e as any);
                         setIsMenuOpen(false);
                       }}
+                      disabled={isSigningIn}
                       className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-2"
                     >
-                      <span>Sign In with Google</span>
+                      <span>{isSigningIn ? 'Opening Google...' : 'Sign In with Google'}</span>
                     </button>
                   </div>
                 )}
@@ -733,6 +745,11 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
+        {authError && !user && (
+          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800 shadow-sm">
+            {authError}
+          </div>
+        )}
         {user && (!landlord.houseName || !landlord.name || !landlord.mobile) && activeTab !== 'landlord' && (
           <div className="mb-6 p-4 bg-amber-50/90 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-sm">
             <div className="flex items-start gap-2.5">
