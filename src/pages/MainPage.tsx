@@ -83,67 +83,8 @@ const App: React.FC = () => {
     setIsSearching(true);
     setHasSearched(true);
     try {
-      // 1. Search cloud receipts via Firestore
       const cloudResults = await searchReceipts(term, lFilter);
-
-      // 2. Search local receipts state (covers Guest Mode & local receipts)
-      const localResults = receipts.filter((r: ReceiptRecord) => {
-        if (!term && !lFilter) return false;
-
-        const flatNorm = normalizeStr(r.flatNo);
-        const nameNorm = normalizeStr(r.tenantName);
-        const tenantPhoneNorm = normalizePhone(r.tenantPhone || r.phone);
-        const houseNameNorm = normalizeStr(r.landlordInfo?.houseName || landlord?.houseName);
-        const houseNoNorm = normalizeStr(r.landlordInfo?.houseNo || landlord?.houseNo);
-        const landlordMobileNorm = normalizePhone(r.landlordInfo?.mobile || landlord?.mobile);
-        const landlordNameNorm = normalizeStr(r.landlordInfo?.name || landlord?.name);
-
-        const termNorm = normalizeStr(term);
-        const termPhone = normalizePhone(term);
-        const termPhoneSearch = termPhone.length >= 8;
-        const lFilterNorm = normalizeStr(lFilter);
-        const lFilterPhone = normalizePhone(lFilter);
-        const lFilterPhoneSearch = lFilterPhone.length >= 8;
-
-        const matchesLandlord = (fNorm: string, fPhone: string, phoneSearch: boolean) => {
-          if (!fNorm && !fPhone) return true;
-          return (
-            (phoneSearch && fPhone && landlordMobileNorm && landlordMobileNorm.includes(fPhone)) ||
-            (fNorm && houseNameNorm && houseNameNorm.includes(fNorm)) ||
-            (fNorm && houseNoNorm && houseNoNorm.includes(fNorm)) ||
-            (fNorm && landlordNameNorm && landlordNameNorm.includes(fNorm))
-          );
-        };
-
-        const matchesTenant = (fNorm: string, fPhone: string, phoneSearch: boolean) => {
-          if (!fNorm && !fPhone) return true;
-          const flatExactMatch = flatNorm && fNorm && flatNorm === fNorm;
-          return (
-            flatExactMatch ||
-            (fNorm && nameNorm && nameNorm.includes(fNorm)) ||
-            (phoneSearch && fPhone && tenantPhoneNorm && tenantPhoneNorm.includes(fPhone)) ||
-            (fNorm && (r.rentMonth || '').toLowerCase().includes(fNorm)) ||
-            (fNorm && (r.paymentDate || '').toLowerCase().includes(fNorm)) ||
-            (fNorm && (r.id || '').toString().toLowerCase() === fNorm)
-          );
-        };
-
-        if (lFilter && term) {
-          return matchesLandlord(lFilterNorm, lFilterPhone, lFilterPhoneSearch) && matchesTenant(termNorm, termPhone, termPhoneSearch);
-        }
-
-        if (lFilter) return matchesLandlord(lFilterNorm, lFilterPhone, lFilterPhoneSearch);
-        if (term) return matchesTenant(termNorm, termPhone, termPhoneSearch) || (termPhoneSearch && matchesLandlord(termNorm, termPhone, termPhoneSearch));
-
-        return false;
-      });
-
-      // Combine cloud + local results, avoiding duplicates by id
-      const combinedMap = new Map();
-      cloudResults.forEach(r => combinedMap.set(r.id, r));
-      localResults.forEach(r => combinedMap.set(r.id, r));
-
-      setSearchResults(Array.from(combinedMap.values()));
+      setSearchResults(cloudResults);
     } catch (err) {
       console.error('Search failed:', err);
       setSearchResults([]);
@@ -249,16 +190,7 @@ const App: React.FC = () => {
         // Unauthenticated mode: reset landlord to empty profile
         setLandlord(LANDLORD_DEFAULT);
         setTenants(getStoredTenants());
-        try {
-          const storedReceipts = localStorage.getItem('rentmaster_guest_receipts');
-          if (storedReceipts) {
-            setReceipts(JSON.parse(storedReceipts));
-          } else {
-            setReceipts([]);
-          }
-        } catch (e) {
-          setReceipts([]);
-        }
+        setReceipts([]);
         setIsLoadingReceipts(false);
       }
     });
@@ -310,10 +242,11 @@ const App: React.FC = () => {
       }
       
       const tenant = tenants.find(t => t.id === Number(value));
+      const isGuest = !user;
       
-      // Auto-calculate previous due from history
+      // Auto-calculate previous due from history only for authenticated users.
       let autoPreviousDue = 0;
-      if (receipts.length > 0) {
+      if (!isGuest && receipts.length > 0) {
         const tenantHistory = receipts
           .filter(r => Number(r.tenantId) === Number(value) && r.id !== editingReceiptId)
           .sort((a, b) => {
@@ -332,14 +265,14 @@ const App: React.FC = () => {
         tenantId: value,
         tenantName: tenant ? tenant.name : '',
         flatNo: tenant ? tenant.flatNo : '',
-        houseRent: tenant ? (tenant.fixedRent || 0) : 0,
-        gasBill: tenant ? (landlord.defaultGasBill !== undefined && landlord.defaultGasBill !== null ? Number(landlord.defaultGasBill) : 0) : 0,
-        waterBill: tenant ? (landlord.defaultWaterBill !== undefined && landlord.defaultWaterBill !== null ? Number(landlord.defaultWaterBill) : 0) : 0,
-        wifiBill: tenant ? (tenant.fixedWifi || 0) : 0,
-        garbageBill: tenant ? (landlord.defaultGarbageBill !== undefined && landlord.defaultGarbageBill !== null ? Number(landlord.defaultGarbageBill) : 0) : 0,
-        previousDue: autoPreviousDue,
-        electricityBill: 0,           // Fix: Reset variable fields
-        paidAmount: 0,                // Fix: Reset variable fields
+        houseRent: isGuest ? 0 : tenant ? (tenant.fixedRent || 0) : 0,
+        gasBill: isGuest ? 0 : tenant ? (landlord.defaultGasBill !== undefined && landlord.defaultGasBill !== null ? Number(landlord.defaultGasBill) : 0) : 0,
+        waterBill: isGuest ? 0 : tenant ? (landlord.defaultWaterBill !== undefined && landlord.defaultWaterBill !== null ? Number(landlord.defaultWaterBill) : 0) : 0,
+        wifiBill: isGuest ? 0 : tenant ? (tenant.fixedWifi || 0) : 0,
+        garbageBill: isGuest ? 0 : tenant ? (landlord.defaultGarbageBill !== undefined && landlord.defaultGarbageBill !== null ? Number(landlord.defaultGarbageBill) : 0) : 0,
+        previousDue: isGuest ? 0 : autoPreviousDue,
+        electricityBill: 0,
+        paidAmount: 0,
         paymentDate: new Date().toISOString().split('T')[0],
       }));
       setResult(null); // Fix: Clear previous result
@@ -574,14 +507,12 @@ const App: React.FC = () => {
         await saveReceipt(user.uid, calcResult, landlord);
       }
     } else {
-      // In guest mode, persist in local receipts state & localStorage
+      // Guest mode does not persist receipts to localStorage.
       setReceipts(prev => {
         const exists = prev.some(r => r.id === guestReceiptId);
-        const next = exists 
+        return exists 
           ? prev.map(r => r.id === guestReceiptId ? guestReceipt : r)
           : [guestReceipt, ...prev];
-        localStorage.setItem('rentmaster_guest_receipts', JSON.stringify(next));
-        return next;
       });
     }
     

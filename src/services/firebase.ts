@@ -265,19 +265,19 @@ const normalizePhone = (val: any) => {
 };
 
 const isFlatQuery = (value: string) => {
-  const converted = value.trim();
-  if (!converted) return false;
-  return /^[0-9A-Za-z]{1,5}$/.test(converted);
+  const normalized = normalizeStr(value);
+  return normalized.length > 0 && /^[a-z0-9]+$/i.test(normalized);
 };
 
 export const searchReceipts = async (searchTerm?: string, landlordFilter?: string) => {
-  const termRaw = bnToEnNums((searchTerm || '').trim().toLowerCase());
+  const rawTerm = (searchTerm || '').trim();
+  const termRaw = bnToEnNums(rawTerm.toLowerCase());
   const lFilterRaw = bnToEnNums((landlordFilter || '').trim().toLowerCase());
 
   const termNorm = normalizeStr(termRaw);
   const termPhone = normalizePhone(termRaw);
   const termPhoneSearch = termPhone.length >= 8;
-  const shouldMatchFlat = isFlatQuery(termRaw);
+  const shouldMatchFlat = isFlatQuery(rawTerm);
 
   const lFilterNorm = normalizeStr(lFilterRaw);
   const lFilterPhone = normalizePhone(lFilterRaw);
@@ -291,7 +291,16 @@ export const searchReceipts = async (searchTerm?: string, landlordFilter?: strin
     if (isFlatSearch && !lFilterRaw) {
       const flatQuery = query(receiptsRef, where('flatNoNorm', '==', termNorm), limit(200));
       const snap = await getDocs(flatQuery);
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as ReceiptRecord));
+      const results = snap.docs.map(d => ({ id: d.id, ...d.data() } as ReceiptRecord));
+      if (results.length > 0) return results;
+
+      const allSnap = await getDocs(receiptsRef);
+      return allSnap.docs
+        .map(d => ({ id: d.id, ...d.data() } as ReceiptRecord))
+        .filter((r) => {
+          const flatNorm = r.flatNoNorm || normalizeStr(r.flatNo);
+          return flatNorm === termNorm;
+        });
     }
 
     if (termPhoneSearch && !lFilterRaw) {
