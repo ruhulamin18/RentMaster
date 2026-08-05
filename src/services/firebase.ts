@@ -1,5 +1,5 @@
 import { initializeApp, FirebaseOptions } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithRedirect, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
@@ -47,13 +47,20 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const signInWithGoogle = async () => {
   try {
-    await signInWithRedirect(auth, googleProvider);
-    return null;
+    const result = await signInWithPopup(auth, googleProvider);
+    console.log('Google sign-in succeeded', result.user?.email || result.user?.uid);
+    return result;
   } catch (error: any) {
     console.error('Google sign-in error:', error);
 
     const code = error?.code || 'unknown';
     const message = error?.message || 'Unknown Firebase auth error';
+
+    if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      console.warn('Popup sign-in did not complete, trying redirect:', code, message);
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
 
     if (code === 'auth/unauthorized-domain') {
       console.warn('Unauthorized domain for Firebase auth:', code, message);
