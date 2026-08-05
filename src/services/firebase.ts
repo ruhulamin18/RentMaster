@@ -22,14 +22,14 @@ import firebaseJson from '../../firebase-applet-config.json';
 import { LandlordInfo, Tenant, CalculationResult, ReceiptRecord } from '../types';
 
 const firebaseConfig: FirebaseOptions & { firestoreDatabaseId?: string } = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseJson.apiKey,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseJson.authDomain,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseJson.projectId,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseJson.storageBucket,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseJson.messagingSenderId,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseJson.appId,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseJson.measurementId,
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseJson.firestoreDatabaseId,
+  apiKey: firebaseJson.apiKey,
+  authDomain: firebaseJson.authDomain,
+  projectId: firebaseJson.projectId,
+  storageBucket: firebaseJson.storageBucket,
+  messagingSenderId: firebaseJson.messagingSenderId,
+  appId: firebaseJson.appId,
+  measurementId: firebaseJson.measurementId,
+  firestoreDatabaseId: firebaseJson.firestoreDatabaseId,
 };
 
 const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId', 'firestoreDatabaseId'] as const;
